@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Publishing Planner</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+:root {
+  --bg: #ffffff; --bg2: #f5f4f0; --bg3: #ededea;
+  --text: #1a1a18; --text2: #6b6b67; --text3: #9b9b97;
+  --border: rgba(0,0,0,0.12); --border2: rgba(0,0,0,0.22);
+  --danger-bg: #fcebeb; --danger: #a32d2d;
+  --ok: #1D9E75; --warn: #BA7517;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1e1e1c; --bg2: #2a2a27; --bg3: #313130;
+    --text: #e8e8e3; --text2: #9b9b97; --text3: #666663;
+    --border: rgba(255,255,255,0.12); --border2: rgba(255,255,255,0.22);
+    --danger-bg: #2d1414; --danger: #f09595;
+  }
+}
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg3); color: var(--text); min-height: 100vh; }
+header { background: var(--bg); border-bottom: 0.5px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 12px; }
+header h1 { font-size: 15px; font-weight: 500; margin: 0; }
+header span.subtitle { font-size: 13px; color: var(--text3); }
+
+.undo-btn {
+  margin-left: auto;
+  background: none; border: 0.5px solid var(--border);
+  border-radius: 8px; padding: 5px 10px;
+  font-family: inherit; font-size: 12px; color: var(--text2);
+  cursor: pointer; display: flex; align-items: center; gap: 5px;
+}
+.undo-btn:hover:not(:disabled) { color: var(--text); background: var(--bg2); }
+.undo-btn:disabled { opacity: 0.4; cursor: default; }
+
+.status-indicator { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text3); }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text3); transition: background 0.2s; flex-shrink: 0; }
+.status-dot.connecting { background: var(--warn); }
+.status-dot.connected { background: var(--ok); }
+.status-dot.error, .status-dot.offline { background: var(--danger); }
+
+.load-error { margin: 24px; padding: 12px 16px; border-radius: 10px; background: var(--danger-bg); color: var(--danger); font-size: 13px; }
+
+.board { display: flex; flex-wrap: wrap; gap: 16px; padding: 24px; align-items: flex-start; }
+
+.box {
+  background: var(--bg);
+  border: 0.5px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
+  flex: 1 1 240px;
+  max-width: 340px;
+  min-width: 0;
+}
+
+/* SortableJS states */
+.sortable-ghost { opacity: 0.35; }
+.sortable-chosen { background: var(--bg2); }
+tr.sortable-ghost td { background: var(--bg2); }
+.sortable-fallback { opacity: 0.9; }
+
+/* Header */
+.box-header { display: flex; align-items: flex-start; gap: 6px; margin-bottom: 10px; }
+.drag-handle { cursor: grab; color: var(--text3); display: flex; align-items: center; justify-content: center; border-radius: 4px; touch-action: none; -webkit-user-select: none; user-select: none; }
+.drag-handle:active { cursor: grabbing; }
+.box-drag-handle { font-size: 16px; flex-shrink: 0; padding: 2px; margin-top: 3px; }
+.box-drag-handle:hover { color: var(--text2); background: var(--bg2); }
+.box-title {
+  font-size: 14px; font-weight: 500; color: var(--text);
+  outline: none; border: none; background: transparent;
+  flex: 1; min-width: 0;
+  cursor: text; padding: 2px 4px; border-radius: 4px;
+  font-family: inherit;
+  line-height: 1.4;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.box-title:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text3);
+}
+.box-title:focus { background: var(--bg2); }
+.box-header-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; margin-top: 1px; }
+.icon-btn { background: none; border: none; cursor: pointer; color: var(--text3); font-size: 16px; padding: 3px 5px; border-radius: 4px; display: flex; align-items: center; }
+.icon-btn:hover { color: var(--text); background: var(--bg2); }
+.icon-btn.danger:hover { color: var(--danger); background: var(--danger-bg); }
+
+/* Color picker */
+.color-section { overflow: hidden; transition: max-height 0.2s ease, margin-bottom 0.2s ease; max-height: 0; margin-bottom: 0; }
+.color-section.open { max-height: 32px; margin-bottom: 10px; }
+.color-picker { display: flex; gap: 5px; padding-top: 2px; }
+.color-swatch { width: 14px; height: 14px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; flex-shrink: 0; }
+.color-swatch.active { border-color: var(--text); }
+
+/* Bullet table */
+.bullet-table { width: 100%; border-collapse: collapse; margin: 0; table-layout: fixed; }
+
+.bullet-table thead th {
+  text-align: left; font-size: 11px; font-weight: 500; color: var(--text3);
+  padding: 0 4px 6px; border-bottom: 1px solid var(--border);
+}
+.bullet-table thead th.col-handle, .bullet-table thead th.col-remove { padding: 0 0 6px; }
+
+.bullet-row td { padding: 3px 4px; vertical-align: top; }
+
+.empty-row td { height: 22px; padding: 2px 4px; font-size: 11px; color: var(--text3); }
+
+.bullet-drag-handle {
+  font-size: 14px;
+  padding: 1px;
+  opacity: 0; margin-top: 3px;
+}
+.bullet-row:hover .bullet-drag-handle { opacity: 1; }
+
+.bullet-text {
+  font-size: 13px; color: var(--text2);
+  outline: none; border: none; background: transparent;
+  line-height: 1.55; padding: 2px 4px;
+  border-radius: 4px;
+  font-family: inherit;
+  min-width: 0;
+  word-break: break-word;
+  white-space: pre-wrap;
+  cursor: text;
+}
+.bullet-text:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text3);
+}
+.bullet-text:focus { color: var(--text); background: var(--bg2); }
+
+.remove-bullet {
+  background: none; border: none; cursor: pointer;
+  color: var(--text3); font-size: 13px;
+  padding: 1px 3px; border-radius: 3px;
+  display: flex; align-items: center;
+  opacity: 0; margin-top: 3px;
+}
+.bullet-row:hover .remove-bullet { opacity: 1; }
+.remove-bullet:hover { color: var(--danger); background: var(--danger-bg); }
+
+/* Subcategories */
+.groups-wrap { display: block; }
+.group-section { margin-top: 10px; }
+.group-head-row td { padding: 4px 4px 3px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.group-drag-handle { font-size: 14px; padding: 1px; opacity: 0.5; }
+.group-section:hover .group-drag-handle { opacity: 1; }
+.group-title {
+  font-size: 12px; font-weight: 600; color: var(--text2);
+  letter-spacing: 0.02em;
+  outline: none; border: none; background: transparent;
+  padding: 2px 4px; border-radius: 4px;
+  font-family: inherit; line-height: 1.4;
+  word-break: break-word; white-space: pre-wrap; cursor: text;
+}
+.group-title:empty::before { content: attr(data-placeholder); color: var(--text3); font-weight: 500; }
+.group-title:focus { background: var(--bg2); color: var(--text); }
+.group-head-actions { display: flex; align-items: center; justify-content: flex-end; gap: 0; }
+.group-head-actions .icon-btn { font-size: 13px; padding: 2px 3px; }
+
+/* Buttons */
+.box-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.add-bullet { background: none; border: none; cursor: pointer; color: var(--text3); font-size: 12px; display: flex; align-items: center; gap: 5px; padding: 4px 2px; border-radius: 4px; font-family: inherit; text-align: left; }
+.add-bullet:hover { color: var(--text); }
+
+.add-box-btn {
+  background: none; border: 0.5px dashed var(--border2);
+  border-radius: 14px; padding: 1rem 1.25rem;
+  flex: 1 1 240px; max-width: 340px;
+  cursor: pointer; color: var(--text3); font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; min-height: 80px; font-family: inherit;
+}
+.add-box-btn:hover { color: var(--text); background: var(--bg2); }
+
+/* Toast */
+.toast-host { position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; z-index: 50; pointer-events: none; }
+.toast {
+  pointer-events: auto;
+  display: flex; align-items: center; gap: 14px;
+  background: var(--text); color: var(--bg);
+  border-radius: 10px; padding: 10px 12px 10px 16px;
+  font-size: 13px; box-shadow: 0 6px 24px rgba(0,0,0,0.22);
+}
+.toast-btn {
+  background: none; border: none; cursor: pointer;
+  color: inherit; font-family: inherit; font-size: 13px; font-weight: 600;
+  padding: 3px 8px; border-radius: 6px; opacity: 0.85;
+}
+.toast-btn:hover { opacity: 1; background: rgba(127,127,127,0.25); }
+
+/* Touch devices: drag handles are always visible, never hover-gated */
+@media (hover: none), (pointer: coarse) {
+  .bullet-drag-handle, .group-drag-handle { opacity: 1; }
+  .remove-bullet { opacity: 1; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Publishing Planner</h1>
+  <span class="subtitle">JINX Music</span>
+  <button class="undo-btn" id="undoBtn" disabled><i class="ti ti-arrow-back-up"></i> Rückgängig</button>
+  <div class="status-indicator">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Verbinde…</span>
+  </div>
+</header>
+<div class="board" id="board"></div>
+<div class="toast-host" id="toastHost"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script>
+// Schema this page expects (run once in Supabase):
+//
+//   create table ar_groups (
+//     id uuid primary key default gen_random_uuid(),
+//     box_id uuid references ar_boxes(id) on delete cascade,
+//     title text default '',
+//     position int default 0
+//   );
+//   alter table ar_bullets add column group_id uuid references ar_groups(id) on delete set null;
+//   alter publication supabase_realtime add table ar_groups;
+//
+// ar_boxes.id, ar_bullets.id and ar_groups.id are all uuid, defaulting to
+// gen_random_uuid() but accepting an explicit value on insert — undo relies on
+// that to re-insert deleted rows with their original ids.
+//
+// Anon key is safe to ship client-side, but RLS policies on ar_boxes / ar_groups /
+// ar_bullets must permit the operations this page performs (select/insert/update/delete).
+const SUPABASE_URL = 'https://qwxgckopwgzjtvekjenr.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_iPYVD8FadZcs8Tj00XFyMQ_UxJSLMpj';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const COLORS = [
+  { dot:'#7F77DD', border:'#534AB7' },
+  { dot:'#1D9E75', border:'#0F6E56' },
+  { dot:'#D85A30', border:'#993C1D' },
+  { dot:'#D4537E', border:'#993556' },
+  { dot:'#BA7517', border:'#854F0B' },
+  { dot:'#378ADD', border:'#185FA5' },
+];
+
+let boxes = [];
+let isEditing = false;
+let pendingRender = false;
+let sortables = [];
+
+// Rows created optimistically before their INSERT resolves carry a 'tmp_' id.
+function tempId() { return 'tmp_' + Date.now().toString(36) + Math.random().toString(36).slice(2); }
+function isTemp(id) { return typeof id === 'string' && id.indexOf('tmp_') === 0; }
+
+// Resolves an object's real database id, waiting out its pending insert if any.
+async function withRealId(obj) {
+  if (obj._pending) await obj._pending;
+  return (obj.id && !isTemp(obj.id)) ? obj.id : null;
+}
+
+// A bullet keeps a reference to its group object, so a subcategory whose INSERT is
+// still in flight can still be resolved to a real id at persist time.
+async function realGroupId(bl) {
+  if (bl._group) return await withRealId(bl._group);
+  return (bl.group_id && !isTemp(bl.group_id)) ? bl.group_id : null;
+}
+
+// An INSERT replaces the temporary id, but rendered nodes still carry the old
+// one until the next render — both are accepted when matching DOM back to model.
+function adoptRealId(obj, data) {
+  const previous = obj.id;
+  Object.assign(obj, data);
+  if (isTemp(previous)) obj._tmpId = previous;
+}
+function matchesDomId(obj, domId) {
+  return String(obj.id) === domId || obj._tmpId === domId;
+}
+
+function setBulletGroup(bl, group) {
+  bl.group_id = group ? group.id : null;
+  bl._group = group || null;
+}
+
+// --- Self-echo suppression: writes we initiate are marked here so the ---
+// --- realtime subscription (which also receives our own commits) skips them. ---
+const selfWrites = new Map(); // id -> { count, expires }
+const SELF_ECHO_TTL = 10000;
+function markSelf(id) {
+  const now = Date.now();
+  const entry = selfWrites.get(id);
+  if (entry && entry.expires > now) { entry.count += 1; entry.expires = now + SELF_ECHO_TTL; }
+  else selfWrites.set(id, { count: 1, expires: now + SELF_ECHO_TTL });
+}
+function isSelfEcho(id) {
+  const entry = selfWrites.get(id);
+  if (!entry || entry.expires <= Date.now()) { selfWrites.delete(id); return false; }
+  entry.count -= 1;
+  if (entry.count <= 0) selfWrites.delete(id);
+  return true;
+}
+
+const debounceMap = new WeakMap();
+function debouncedUpdate(obj, field, fn, delay) {
+  let timers = debounceMap.get(obj);
+  if (!timers) { timers = {}; debounceMap.set(obj, timers); }
+  clearTimeout(timers[field]);
+  timers[field] = setTimeout(fn, delay || 400);
+}
+
+function setStatus(state, label) {
+  const dot = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+  dot.className = 'status-dot' + (state ? ' ' + state : '');
+  text.textContent = label;
+}
+
+function showLoadError(message) {
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = 'load-error';
+  div.textContent = message;
+  board.appendChild(div);
+}
+
+// ---------------------------------------------------------------- undo stack
+// Entries close over the live model objects, so an undo is applied locally and
+// rendered first, then written to Supabase — same as every other interaction.
+const UNDO_LIMIT = 30;
+const undoStack = [];
+
+function pushUndo(label, fn) {
+  undoStack.push({ label: label, undo: fn });
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  updateUndoButton();
+}
+
+function updateUndoButton() {
+  const btn = document.getElementById('undoBtn');
+  if (!btn) return;
+  const top = undoStack[undoStack.length - 1];
+  btn.disabled = !top;
+  btn.title = top ? 'Rückgängig: ' + top.label : 'Nichts rückgängig zu machen';
+}
+
+async function performUndo() {
+  const entry = undoStack.pop();
+  updateUndoButton();
+  if (!entry) return;
+  try { await entry.undo(); }
+  catch (e) { console.error(e); }
+}
+
+document.getElementById('undoBtn').addEventListener('click', () => performUndo());
+
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+  if (e.key !== 'z' && e.key !== 'Z') return;
+  const el = document.activeElement;
+  // Inside a text field Ctrl/Cmd+Z stays the browser's own text undo.
+  if (el && (el.isContentEditable || el.closest('[contenteditable="true"]') || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) return;
+  e.preventDefault();
+  performUndo();
+});
+
+// -------------------------------------------------------------------- toast
+let toastTimer = null;
+
+function hideToast() {
+  clearTimeout(toastTimer);
+  toastTimer = null;
+  document.getElementById('toastHost').innerHTML = '';
+}
+
+function showUndoToast(message) {
+  const host = document.getElementById('toastHost');
+  host.innerHTML = '';
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  const label = document.createElement('span');
+  label.textContent = message;
+  const btn = document.createElement('button');
+  btn.className = 'toast-btn';
+  btn.textContent = 'Rückgängig';
+  btn.addEventListener('click', () => { hideToast(); performUndo(); });
+  toast.appendChild(label);
+  toast.appendChild(btn);
+  host.appendChild(toast);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, 6000);
+}
+
+// ------------------------------------------------------------- model helpers
+function sortBoxes() { boxes.sort((a, b) => (a.position ?? 0) - (b.position ?? 0)); }
+function sortGroups(box) { box.groups.sort((a, b) => (a.position ?? 0) - (b.position ?? 0)); }
+
+// Bullet positions are ordered within their bucket: ungrouped, or one subcategory.
+function bulletsOf(box, groupId) {
+  const gid = groupId || null;
+  return box.bullets
+    .filter(b => (b.group_id || null) === gid)
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+}
+
+function renumberBoxes() { boxes.forEach((b, i) => { b.position = i; }); }
+function renumberGroups(box) { box.groups.forEach((g, i) => { g.position = i; }); }
+function renumberBucket(box, groupId) { bulletsOf(box, groupId).forEach((b, i) => { b.position = i; }); }
+
+async function persistBoxPositions() {
+  await Promise.all(boxes.map(async b => {
+    const id = await withRealId(b);
+    if (!id) return;
+    markSelf(id);
+    const { error } = await sb.from('ar_boxes').update({ position: b.position }).eq('id', id);
+    if (error) console.error(error);
+  }));
+}
+
+async function persistGroupPositions(box) {
+  await Promise.all(box.groups.map(async g => {
+    const id = await withRealId(g);
+    if (!id) return;
+    markSelf(id);
+    const { error } = await sb.from('ar_groups').update({ position: g.position }).eq('id', id);
+    if (error) console.error(error);
+  }));
+}
+
+// Writes both the bucket (group_id) and the position of each given row.
+async function persistBulletRows(rows) {
+  await Promise.all(rows.map(async bl => {
+    const id = await withRealId(bl);
+    if (!id) return;
+    const gid = await realGroupId(bl);
+    markSelf(id);
+    const { error } = await sb.from('ar_bullets').update({ position: bl.position, group_id: gid }).eq('id', id);
+    if (error) console.error(error);
+  }));
+}
+
+function persistBulletBucket(box, groupId) {
+  return persistBulletRows(bulletsOf(box, groupId));
+}
+
+// ---------------------------------------------------- snapshots used by undo
+function snapshotBullets(box) {
+  return {
+    box: box,
+    rows: box.bullets.map(b => ({ ref: b, group_id: b.group_id || null, group: b._group || null, position: b.position })),
+  };
+}
+
+function restoreBullets(snap) {
+  snap.rows.forEach(r => {
+    if (snap.box.bullets.indexOf(r.ref) === -1) snap.box.bullets.push(r.ref);
+    r.ref.group_id = r.group_id;
+    r.ref._group = r.group;
+    r.ref.position = r.position;
+  });
+  render();
+  persistBulletRows(snap.rows.map(r => r.ref));
+}
+
+function snapshotBoxOrder() { return boxes.map(b => ({ ref: b, position: b.position })); }
+function restoreBoxOrder(snap) {
+  snap.forEach(s => { s.ref.position = s.position; });
+  sortBoxes();
+  render();
+  persistBoxPositions();
+}
+
+function snapshotGroupOrder(box) { return { box: box, groups: box.groups.map(g => ({ ref: g, position: g.position })) }; }
+function restoreGroupOrder(snap) {
+  snap.groups.forEach(s => { s.ref.position = s.position; });
+  sortGroups(snap.box);
+  render();
+  persistGroupPositions(snap.box);
+}
+
+async function applyTextUndo(obj, table, field, value) {
+  obj[field] = value;
+  render();
+  const id = await withRealId(obj);
+  if (!id) return;
+  markSelf(id);
+  const { error } = await sb.from(table).update({ [field]: value }).eq('id', id);
+  if (error) console.error(error);
+}
+
+// ------------------------------------------------- realtime-applied mutations
+function upsertLocalBox(row) {
+  let box = boxes.find(b => b.id === row.id);
+  if (box) Object.assign(box, row);
+  else { box = Object.assign({}, row, { bullets: [], groups: [] }); boxes.push(box); }
+  sortBoxes();
+  return box;
+}
+
+function upsertLocalGroup(row) {
+  const box = boxes.find(b => b.id === row.box_id);
+  if (!box) return;
+  const g = box.groups.find(x => x.id === row.id);
+  if (g) Object.assign(g, row);
+  else { box.groups.push(Object.assign({}, row)); sortGroups(box); }
+  // Rows already present need their link to the group object refreshed.
+  box.bullets.forEach(b => {
+    if (b.group_id === row.id) b._group = box.groups.find(x => x.id === row.id) || null;
+  });
+}
+
+function upsertLocalBullet(row) {
+  const box = boxes.find(b => b.id === row.box_id);
+  if (!box) return;
+  const group = box.groups.find(g => g.id === row.group_id) || null;
+  const bl = box.bullets.find(x => x.id === row.id);
+  if (bl) { Object.assign(bl, row); bl._group = group; }
+  else box.bullets.push(Object.assign({}, row, { _group: group }));
+}
+
+function removeLocalBox(id) { boxes = boxes.filter(b => b.id !== id); }
+
+function removeLocalGroup(id) {
+  for (const box of boxes) {
+    const i = box.groups.findIndex(g => g.id === id);
+    if (i === -1) continue;
+    box.groups.splice(i, 1);
+    box.bullets.forEach(b => { if ((b.group_id || null) === id) setBulletGroup(b, null); });
+    return;
+  }
+}
+
+function removeLocalBullet(id) {
+  for (const box of boxes) {
+    const i = box.bullets.findIndex(x => x.id === id);
+    if (i !== -1) { box.bullets.splice(i, 1); return; }
+  }
+}
+
+function scheduleRender() {
+  if (isEditing) { pendingRender = true; return; }
+  render();
+}
+
+// --------------------------------------------------------------- editing glue
+function placeCaretAtStart(el) {
+  el.focus();
+  const range = document.createRange();
+  range.setStart(el, 0);
+  range.collapse(true);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+function getTextContent(el) {
+  return el.innerText.replace(/\n$/, '');
+}
+
+function focusField(boxId, bulletId, field) {
+  const el = document.querySelector('.bullet-text[data-box-id="' + boxId + '"][data-bullet-id="' + bulletId + '"][data-field="' + field + '"]');
+  if (el) placeCaretAtStart(el);
+}
+
+function focusGroupTitle(groupId) {
+  const el = document.querySelector('.group-title[data-group-id="' + groupId + '"]');
+  if (el) placeCaretAtStart(el);
+}
+
+// Tracks focus (to defer re-renders mid-edit) and records one undo entry per
+// editing session — the value as it stood when the field gained focus.
+function bindEditable(el, obj, table, field) {
+  let before = null;
+  el.addEventListener('focus', () => { isEditing = true; before = obj[field] || ''; });
+  el.addEventListener('blur', () => {
+    isEditing = false;
+    if (before !== null && (obj[field] || '') !== before) {
+      const previous = before;
+      pushUndo('Textänderung', () => applyTextUndo(obj, table, field, previous));
+    }
+    before = null;
+    if (pendingRender) { pendingRender = false; render(); }
+  });
+}
+
+// -------------------------------------------------------------------- loading
+async function loadData() {
+  setStatus('connecting', 'Verbinde…');
+  const [boxRes, groupRes, bulletRes] = await Promise.all([
+    sb.from('ar_boxes').select('*').order('position', { ascending: true }).order('id', { ascending: true }),
+    sb.from('ar_groups').select('*').order('position', { ascending: true }).order('id', { ascending: true }),
+    sb.from('ar_bullets').select('*').order('position', { ascending: true }).order('id', { ascending: true }),
+  ]);
+  if (boxRes.error || groupRes.error || bulletRes.error) {
+    console.error(boxRes.error || groupRes.error || bulletRes.error);
+    setStatus('error', 'Fehler beim Laden');
+    showLoadError('Daten konnten nicht geladen werden. Bitte Supabase-Konfiguration prüfen.');
+    return;
+  }
+  boxes = (boxRes.data || []).map(b => Object.assign({}, b, {
+    groups: (groupRes.data || []).filter(g => g.box_id === b.id).map(g => Object.assign({}, g)),
+    bullets: (bulletRes.data || []).filter(x => x.box_id === b.id).map(x => Object.assign({}, x)),
+  }));
+  boxes.forEach(box => box.bullets.forEach(bl => {
+    bl._group = box.groups.find(g => g.id === bl.group_id) || null;
+  }));
+  render();
+  subscribeRealtime();
+}
+
+function subscribeRealtime() {
+  sb.channel('ar_planner_realtime')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'ar_boxes' }, (payload) => {
+      const id = payload.new && payload.new.id !== undefined ? payload.new.id : (payload.old && payload.old.id);
+      if (isSelfEcho(id)) return; // our own write echoing back — already applied locally
+      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') upsertLocalBox(payload.new);
+      else if (payload.eventType === 'DELETE') removeLocalBox(payload.old.id);
+      scheduleRender();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'ar_groups' }, (payload) => {
+      const id = payload.new && payload.new.id !== undefined ? payload.new.id : (payload.old && payload.old.id);
+      if (isSelfEcho(id)) return;
+      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') upsertLocalGroup(payload.new);
+      else if (payload.eventType === 'DELETE') removeLocalGroup(payload.old.id);
+      scheduleRender();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'ar_bullets' }, (payload) => {
+      const id = payload.new && payload.new.id !== undefined ? payload.new.id : (payload.old && payload.old.id);
+      if (isSelfEcho(id)) return;
+      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') upsertLocalBullet(payload.new);
+      else if (payload.eventType === 'DELETE') removeLocalBullet(payload.old.id);
+      scheduleRender();
+    })
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') setStatus('connected', 'Verbunden');
+      else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') setStatus('error', 'Verbindung getrennt');
+      else if (status === 'CLOSED') setStatus('offline', 'Getrennt');
+    });
+}
+
+// --------------------------------------------------------------------- boxes
+function addBox() {
+  const tid = tempId();
+  const color = boxes.length % COLORS.length;
+  const local = { id: tid, title: '', color, position: boxes.length, bullets: [], groups: [] };
+  boxes.push(local);
+  render();
+  setTimeout(() => {
+    const all = document.querySelectorAll('.box-title');
+    all[all.length - 1] && all[all.length - 1].focus();
+  }, 30);
+
+  local._pending = (async () => {
+    const { data, error } = await sb.from('ar_boxes')
+      .insert({ title: local.title, color: local.color, position: local.position })
+      .select().single();
+    if (error) { console.error(error); removeLocalBox(tid); scheduleRender(); return null; }
+    markSelf(data.id);
+    const dup = boxes.find(b => b !== local && b.id === data.id);
+    if (dup) { removeLocalBox(local.id); scheduleRender(); }
+    else adoptRealId(local, data);
+    return data;
+  })();
+}
+
+// Re-inserts a deleted box with its original id, along with its subcategories and
+// rows — ids and positions preserved, so the board comes back exactly as it was.
+async function restoreBox(box) {
+  if (!boxes.some(b => b.id === box.id)) boxes.push(box);
+  sortBoxes();
+  render();
+
+  if (isTemp(box.id)) return; // never reached the database
+  markSelf(box.id);
+  const boxRes = await sb.from('ar_boxes').insert({ id: box.id, title: box.title || '', color: box.color || 0, position: box.position });
+  if (boxRes.error) { console.error(boxRes.error); return; }
+
+  const groups = box.groups.filter(g => !isTemp(g.id));
+  if (groups.length) {
+    groups.forEach(g => markSelf(g.id));
+    const res = await sb.from('ar_groups').insert(groups.map(g => ({
+      id: g.id, box_id: box.id, title: g.title || '', position: g.position,
+    })));
+    if (res.error) console.error(res.error);
+  }
+
+  const bullets = box.bullets.filter(b => !isTemp(b.id));
+  if (bullets.length) {
+    bullets.forEach(b => markSelf(b.id));
+    const res = await sb.from('ar_bullets').insert(bullets.map(b => ({
+      id: b.id,
+      box_id: box.id,
+      group_id: (b.group_id && !isTemp(b.group_id)) ? b.group_id : null,
+      topic: b.topic || '',
+      status: b.status || '',
+      position: b.position,
+    })));
+    if (res.error) console.error(res.error);
+  }
+}
+
+async function deleteBox(box) {
+  removeLocalBox(box.id);
+  render();
+  pushUndo('Box löschen', () => restoreBox(box));
+  showUndoToast('Box gelöscht');
+
+  const id = await withRealId(box);
+  if (!id) return;
+  markSelf(id);
+  const { error: bulletErr } = await sb.from('ar_bullets').delete().eq('box_id', id);
+  if (bulletErr) console.error(bulletErr);
+  const { error: groupErr } = await sb.from('ar_groups').delete().eq('box_id', id);
+  if (groupErr) console.error(groupErr);
+  const { error: boxErr } = await sb.from('ar_boxes').delete().eq('id', id);
+  if (boxErr) console.error(boxErr);
+}
+
+// ------------------------------------------------------------- subcategories
+function addGroup(box) {
+  const tid = tempId();
+  const local = { id: tid, box_id: box.id, title: '', position: box.groups.length };
+  box.groups.push(local);
+  render();
+  setTimeout(() => focusGroupTitle(local.id), 30);
+
+  local._pending = (async () => {
+    const boxId = await withRealId(box);
+    if (!boxId) { removeLocalGroup(tid); scheduleRender(); return null; }
+    const { data, error } = await sb.from('ar_groups')
+      .insert({ box_id: boxId, title: local.title, position: local.position })
+      .select().single();
+    if (error) { console.error(error); removeLocalGroup(tid); scheduleRender(); return null; }
+    markSelf(data.id);
+    const dup = box.groups.find(g => g !== local && g.id === data.id);
+    if (dup) { removeLocalGroup(local.id); scheduleRender(); return data; }
+    const oldId = local.id;
+    adoptRealId(local, data);
+    // Rows parked under the temporary id follow the subcategory to its real one.
+    box.bullets.forEach(b => { if (b.group_id === oldId) b.group_id = data.id; });
+    return data;
+  })();
+}
+
+async function restoreGroup(box, group, bulletSnap) {
+  if (!box.groups.some(g => g.id === group.id)) box.groups.push(group);
+  sortGroups(box);
+  bulletSnap.rows.forEach(r => {
+    if (box.bullets.indexOf(r.ref) === -1) box.bullets.push(r.ref);
+    r.ref.group_id = r.group_id;
+    r.ref._group = r.group;
+    r.ref.position = r.position;
+  });
+  render();
+
+  if (!isTemp(group.id)) {
+    markSelf(group.id);
+    const res = await sb.from('ar_groups').insert({ id: group.id, box_id: box.id, title: group.title || '', position: group.position });
+    if (res.error) { console.error(res.error); return; }
+  }
+  await persistGroupPositions(box);
+  await persistBulletRows(bulletSnap.rows.map(r => r.ref));
+}
+
+// Deleting a subcategory keeps its rows — they move down into the ungrouped bucket.
+async function deleteGroup(box, group) {
+  const snap = snapshotBullets(box);
+  const orphans = bulletsOf(box, group.id);
+  let next = bulletsOf(box, null).length;
+  orphans.forEach(b => { setBulletGroup(b, null); b.position = next++; });
+
+  const i = box.groups.indexOf(group);
+  if (i !== -1) box.groups.splice(i, 1);
+  renumberGroups(box);
+  render();
+
+  pushUndo('Unterkategorie löschen', () => restoreGroup(box, group, snap));
+  showUndoToast('Unterkategorie gelöscht');
+
+  await persistBulletRows(orphans);
+  await persistGroupPositions(box);
+  const id = await withRealId(group);
+  if (!id) return;
+  markSelf(id);
+  const { error } = await sb.from('ar_groups').delete().eq('id', id);
+  if (error) console.error(error);
+}
+
+// ---------------------------------------------------------------------- rows
+function createLocalBullet(box, group, fields, index) {
+  const tid = tempId();
+  const gid = group ? group.id : null;
+  const siblings = bulletsOf(box, gid);
+  const position = index != null ? index : siblings.length;
+  if (index != null) siblings.forEach(s => { if (s.position >= index) s.position += 1; });
+
+  const local = Object.assign({
+    id: tid, box_id: box.id, group_id: gid, _group: group || null,
+    position: position, topic: '', status: '',
+  }, fields);
+  box.bullets.push(local);
+
+  local._pending = (async () => {
+    const boxId = await withRealId(box);
+    if (!boxId) { removeLocalBullet(tid); scheduleRender(); return null; }
+    const groupId = group ? await withRealId(group) : null;
+    const { data, error } = await sb.from('ar_bullets')
+      .insert({ box_id: boxId, group_id: groupId, topic: local.topic, status: local.status, position: local.position })
+      .select().single();
+    if (error) { console.error(error); removeLocalBullet(tid); scheduleRender(); return null; }
+    markSelf(data.id);
+    const dup = box.bullets.find(x => x !== local && x.id === data.id);
+    if (dup) { removeLocalBullet(local.id); scheduleRender(); return data; }
+    const keepGroup = local._group;
+    adoptRealId(local, data);
+    local._group = keepGroup;
+    return data;
+  })();
+
+  return local;
+}
+
+function addBulletToBox(box, group) {
+  const local = createLocalBullet(box, group || null, { topic: '', status: '' });
+  render();
+  setTimeout(() => focusField(box.id, local.id, 'topic'), 30);
+}
+
+async function restoreBullet(box, bl) {
+  if (!box.bullets.some(x => x.id === bl.id)) box.bullets.push(bl);
+  render();
+  if (isTemp(bl.id)) return;
+  markSelf(bl.id);
+  const gid = await realGroupId(bl);
+  const { error } = await sb.from('ar_bullets').insert({
+    id: bl.id, box_id: box.id, group_id: gid,
+    topic: bl.topic || '', status: bl.status || '', position: bl.position,
+  });
+  if (error) console.error(error);
+}
+
+async function deleteBullet(box, bl, opts) {
+  const options = opts || {};
+  removeLocalBullet(bl.id);
+  render();
+  if (options.focusAfter) setTimeout(options.focusAfter, 30);
+  pushUndo('Zeile löschen', () => restoreBullet(box, bl));
+  showUndoToast('Zeile gelöscht');
+
+  const id = await withRealId(bl);
+  if (!id) return;
+  markSelf(id);
+  const { error } = await sb.from('ar_bullets').delete().eq('id', id);
+  if (error) console.error(error);
+}
+
+function bulletKeydown(e, box, group, bl, field, el) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    bl[field] = getTextContent(el);
+    debouncedUpdate(bl, field, async () => {
+      const id = await withRealId(bl);
+      if (!id) return;
+      markSelf(id);
+      const { error } = await sb.from('ar_bullets').update({ [field]: bl[field] }).eq('id', id);
+      if (error) console.error(error);
+    });
+    const newLocal = createLocalBullet(box, group, { topic: '', status: '' }, bl.position + 1);
+    renumberBucket(box, group ? group.id : null);
+    render();
+    persistBulletBucket(box, group ? group.id : null);
+    setTimeout(() => focusField(box.id, newLocal.id, 'topic'), 30);
+    return;
+  }
+  if (e.key === 'Backspace' && getTextContent(el) === '') {
+    const otherField = field === 'topic' ? 'status' : 'topic';
+    if ((bl[otherField] || '') === '' && box.bullets.length > 1) {
+      e.preventDefault();
+      const bucket = bulletsOf(box, group ? group.id : null);
+      const idx = bucket.indexOf(bl);
+      const target = idx > 0 ? bucket[idx - 1] : null;
+      deleteBullet(box, bl, {
+        focusAfter: target ? () => focusField(box.id, target.id, field) : null,
+      });
+    }
+  }
+}
+
+// --------------------------------------------------------- drag & drop (touch)
+// HTML5 drag & drop is mouse-only, so SortableJS drives every reorder here —
+// always from an explicit handle, leaving contenteditable text tappable on touch.
+let dragSnapshot = null;
+
+function clearSortables() {
+  sortables.forEach(s => { try { s.destroy(); } catch (e) { /* already detached */ } });
+  sortables = [];
+}
+
+const SORTABLE_BASE = {
+  animation: 150,
+  fallbackOnBody: true,
+  fallbackTolerance: 4,
+  ghostClass: 'sortable-ghost',
+  chosenClass: 'sortable-chosen',
+  dragClass: 'sortable-drag',
+};
+
+// Reads the post-drop DOM back into the model: the tbody a row landed in decides
+// its subcategory, its index within that tbody decides its position.
+function applyRowOrder(box, boxEl) {
+  boxEl.querySelectorAll('tbody.bullet-body').forEach(tb => {
+    const gi = tb.dataset.groupIdx;
+    const group = gi === '' ? null : box.groups[Number(gi)];
+    let pos = 0;
+    tb.querySelectorAll('tr.bullet-row').forEach(tr => {
+      const bl = box.bullets.find(b => matchesDomId(b, tr.dataset.bulletId));
+      if (!bl) return;
+      setBulletGroup(bl, group);
+      bl.position = pos++;
+    });
+  });
+}
+
+// ------------------------------------------------------------------ rendering
+function render() {
+  const board = document.getElementById('board');
+  const scrollY = window.scrollY;
+  clearSortables();
+  board.innerHTML = '';
+
+  boxes.forEach(box => board.appendChild(renderBox(box)));
+
+  const addBoxBtn = document.createElement('button');
+  addBoxBtn.className = 'add-box-btn';
+  addBoxBtn.innerHTML = '<i class="ti ti-plus" style="font-size:18px"></i> Neue Box';
+  addBoxBtn.addEventListener('click', addBox);
+  board.appendChild(addBoxBtn);
+
+  sortables.push(Sortable.create(board, Object.assign({}, SORTABLE_BASE, {
+    handle: '.box-drag-handle',
+    draggable: '.box',
+    filter: '.add-box-btn',
+    onStart: () => { dragSnapshot = snapshotBoxOrder(); },
+    onEnd: () => {
+      const order = Array.prototype.map.call(board.querySelectorAll('.box'), el => el.dataset.boxId);
+      const reordered = order.map(id => boxes.find(b => matchesDomId(b, id))).filter(Boolean);
+      boxes.filter(b => reordered.indexOf(b) === -1).forEach(b => reordered.push(b));
+      boxes = reordered;
+      const snap = dragSnapshot; dragSnapshot = null;
+      if (snap) pushUndo('Box verschieben', () => restoreBoxOrder(snap));
+      renumberBoxes();
+      render();
+      persistBoxPositions();
+    },
+  })));
+
+  updateUndoButton();
+  window.scrollTo(0, scrollY);
+}
+
+function renderBox(box) {
+  const colorIdx = box.color || 0;
+  const div = document.createElement('div');
+  div.className = 'box';
+  div.dataset.boxId = box.id;
+  div.style.borderTop = '3px solid ' + COLORS[colorIdx].border;
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'box-header';
+
+  const dragHandle = document.createElement('div');
+  dragHandle.className = 'drag-handle box-drag-handle';
+  dragHandle.innerHTML = '<i class="ti ti-grip-vertical"></i>';
+  header.appendChild(dragHandle);
+
+  const title = document.createElement('div');
+  title.className = 'box-title';
+  title.setAttribute('contenteditable', 'true');
+  title.spellcheck = false;
+  title.dataset.placeholder = 'Thema…';
+  title.innerText = box.title || '';
+  bindEditable(title, box, 'ar_boxes', 'title');
+  title.addEventListener('input', () => {
+    box.title = getTextContent(title);
+    debouncedUpdate(box, 'title', async () => {
+      const id = await withRealId(box);
+      if (!id) return;
+      markSelf(id);
+      const { error } = await sb.from('ar_boxes').update({ title: box.title }).eq('id', id);
+      if (error) console.error(error);
+    });
+  });
+  title.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+  header.appendChild(title);
+
+  const actions = document.createElement('div');
+  actions.className = 'box-header-actions';
+
+  const colorBtn = document.createElement('button');
+  colorBtn.className = 'icon-btn';
+  colorBtn.innerHTML = '<i class="ti ti-palette"></i>';
+  colorBtn.addEventListener('click', () => colorSection.classList.toggle('open'));
+  actions.appendChild(colorBtn);
+
+  const delBtn = document.createElement('button');
+  delBtn.className = 'icon-btn danger';
+  delBtn.innerHTML = '<i class="ti ti-x"></i>';
+  delBtn.title = 'Box löschen';
+  delBtn.addEventListener('click', () => deleteBox(box));
+  actions.appendChild(delBtn);
+  header.appendChild(actions);
+  div.appendChild(header);
+
+  // Color picker
+  const colorSection = document.createElement('div');
+  colorSection.className = 'color-section';
+  const picker = document.createElement('div');
+  picker.className = 'color-picker';
+  COLORS.forEach((c, ci) => {
+    const sw = document.createElement('div');
+    sw.className = 'color-swatch' + (ci === colorIdx ? ' active' : '');
+    sw.style.background = c.dot;
+    sw.addEventListener('click', () => {
+      box.color = ci;
+      render();
+      (async () => {
+        const id = await withRealId(box);
+        if (!id) return;
+        markSelf(id);
+        const { error } = await sb.from('ar_boxes').update({ color: ci }).eq('id', id);
+        if (error) console.error(error);
+      })();
+    });
+    picker.appendChild(sw);
+  });
+  colorSection.appendChild(picker);
+  div.appendChild(colorSection);
+
+  // One shared column layout, so every section lines up as a single table would.
+  function makeColgroup() {
+    const colgroup = document.createElement('colgroup');
+    const colHandle = document.createElement('col'); colHandle.style.width = '16px';
+    const colThema = document.createElement('col'); colThema.style.width = '35%';
+    const colStatus = document.createElement('col');
+    const colRemove = document.createElement('col'); colRemove.style.width = '20px';
+    colgroup.appendChild(colHandle); colgroup.appendChild(colThema);
+    colgroup.appendChild(colStatus); colgroup.appendChild(colRemove);
+    return colgroup;
+  }
+
+  function renderRow(bl, group) {
+    const tr = document.createElement('tr');
+    tr.className = 'bullet-row';
+    tr.dataset.bulletId = bl.id;
+
+    const handleCell = document.createElement('td');
+    const rowHandle = document.createElement('div');
+    rowHandle.className = 'drag-handle bullet-drag-handle';
+    rowHandle.innerHTML = '<i class="ti ti-grip-vertical"></i>';
+    handleCell.appendChild(rowHandle);
+
+    function makeField(field, placeholder) {
+      const cell = document.createElement('td');
+      const el = document.createElement('div');
+      el.className = 'bullet-text';
+      el.setAttribute('contenteditable', 'true');
+      el.spellcheck = false;
+      el.dataset.placeholder = placeholder;
+      el.dataset.boxId = box.id;
+      el.dataset.bulletId = bl.id;
+      el.dataset.field = field;
+      el.innerText = bl[field] || '';
+      bindEditable(el, bl, 'ar_bullets', field);
+      el.addEventListener('input', () => {
+        bl[field] = getTextContent(el);
+        debouncedUpdate(bl, field, async () => {
+          const id = await withRealId(bl);
+          if (!id) return;
+          markSelf(id);
+          const { error } = await sb.from('ar_bullets').update({ [field]: bl[field] }).eq('id', id);
+          if (error) console.error(error);
+        });
+      });
+      el.addEventListener('keydown', (e) => bulletKeydown(e, box, group, bl, field, el));
+      cell.appendChild(el);
+      return cell;
+    }
+
+    const removeCell = document.createElement('td');
+    const rm = document.createElement('button');
+    rm.className = 'remove-bullet';
+    rm.innerHTML = '<i class="ti ti-x"></i>';
+    rm.title = 'Zeile löschen';
+    rm.addEventListener('click', () => deleteBullet(box, bl));
+    removeCell.appendChild(rm);
+
+    tr.appendChild(handleCell);
+    tr.appendChild(makeField('topic', 'Thema…'));
+    tr.appendChild(makeField('status', 'Status…'));
+    tr.appendChild(removeCell);
+    return tr;
+  }
+
+  // An empty bucket still needs a drop target tall enough to aim at.
+  function makeBody(group, groupIdx) {
+    const tbody = document.createElement('tbody');
+    tbody.className = 'bullet-body';
+    tbody.dataset.groupIdx = groupIdx == null ? '' : String(groupIdx);
+    const rows = bulletsOf(box, group ? group.id : null);
+    rows.forEach(bl => tbody.appendChild(renderRow(bl, group)));
+    if (!rows.length) {
+      const tr = document.createElement('tr');
+      tr.className = 'empty-row';
+      const td = document.createElement('td');
+      td.colSpan = 4;
+      td.textContent = group ? 'Zeilen hierher ziehen' : '';
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+    sortables.push(Sortable.create(tbody, Object.assign({}, SORTABLE_BASE, {
+      handle: '.bullet-drag-handle',
+      draggable: 'tr.bullet-row',
+      // The group name is per box, so rows move between this box's buckets only.
+      group: { name: 'bullets-' + box.id },
+      onStart: () => { dragSnapshot = snapshotBullets(box); },
+      onEnd: () => {
+        const snap = dragSnapshot; dragSnapshot = null;
+        applyRowOrder(box, div);
+        if (snap) pushUndo('Zeile verschieben', () => restoreBullets(snap));
+        const moved = box.bullets.slice();
+        render();
+        persistBulletRows(moved);
+      },
+    })));
+    return tbody;
+  }
+
+  // Ungrouped rows sit at the top, directly under the column headings.
+  const mainTable = document.createElement('table');
+  mainTable.className = 'bullet-table';
+  mainTable.appendChild(makeColgroup());
+  const thead = document.createElement('thead');
+  thead.innerHTML = '<tr><th class="col-handle"></th><th>Thema</th><th>Status</th><th class="col-remove"></th></tr>';
+  mainTable.appendChild(thead);
+  mainTable.appendChild(makeBody(null, null));
+  div.appendChild(mainTable);
+
+  // Subcategories, each a heading row followed by its own rows.
+  const groupsWrap = document.createElement('div');
+  groupsWrap.className = 'groups-wrap';
+
+  box.groups.forEach((group, gi) => {
+    const table = document.createElement('table');
+    table.className = 'bullet-table group-section';
+    table.dataset.groupId = group.id;
+    table.appendChild(makeColgroup());
+
+    const headBody = document.createElement('tbody');
+    const headRow = document.createElement('tr');
+    headRow.className = 'group-head-row';
+
+    const hHandleCell = document.createElement('td');
+    const gHandle = document.createElement('div');
+    gHandle.className = 'drag-handle group-drag-handle';
+    gHandle.innerHTML = '<i class="ti ti-grip-vertical"></i>';
+    hHandleCell.appendChild(gHandle);
+
+    const hTitleCell = document.createElement('td');
+    hTitleCell.colSpan = 2;
+    const gTitle = document.createElement('div');
+    gTitle.className = 'group-title';
+    gTitle.setAttribute('contenteditable', 'true');
+    gTitle.spellcheck = false;
+    gTitle.dataset.placeholder = 'Unterkategorie…';
+    gTitle.dataset.groupId = group.id;
+    gTitle.innerText = group.title || '';
+    bindEditable(gTitle, group, 'ar_groups', 'title');
+    gTitle.addEventListener('input', () => {
+      group.title = getTextContent(gTitle);
+      debouncedUpdate(group, 'title', async () => {
+        const id = await withRealId(group);
+        if (!id) return;
+        markSelf(id);
+        const { error } = await sb.from('ar_groups').update({ title: group.title }).eq('id', id);
+        if (error) console.error(error);
+      });
+    });
+    gTitle.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+    hTitleCell.appendChild(gTitle);
+
+    const hActionsCell = document.createElement('td');
+    const gActions = document.createElement('div');
+    gActions.className = 'group-head-actions';
+    const gAdd = document.createElement('button');
+    gAdd.className = 'icon-btn';
+    gAdd.innerHTML = '<i class="ti ti-plus"></i>';
+    gAdd.title = 'Zeile hinzufügen';
+    gAdd.addEventListener('click', () => addBulletToBox(box, group));
+    const gDel = document.createElement('button');
+    gDel.className = 'icon-btn danger';
+    gDel.innerHTML = '<i class="ti ti-x"></i>';
+    gDel.title = 'Unterkategorie löschen';
+    gDel.addEventListener('click', () => deleteGroup(box, group));
+    gActions.appendChild(gAdd);
+    gActions.appendChild(gDel);
+    hActionsCell.appendChild(gActions);
+
+    headRow.appendChild(hHandleCell);
+    headRow.appendChild(hTitleCell);
+    headRow.appendChild(hActionsCell);
+    headBody.appendChild(headRow);
+    table.appendChild(headBody);
+
+    table.appendChild(makeBody(group, gi));
+    groupsWrap.appendChild(table);
+  });
+
+  div.appendChild(groupsWrap);
+
+  sortables.push(Sortable.create(groupsWrap, Object.assign({}, SORTABLE_BASE, {
+    handle: '.group-drag-handle',
+    draggable: '.group-section',
+    onStart: () => { dragSnapshot = snapshotGroupOrder(box); },
+    onEnd: () => {
+      const order = Array.prototype.map.call(groupsWrap.querySelectorAll('.group-section'), el => el.dataset.groupId);
+      const reordered = order.map(id => box.groups.find(g => matchesDomId(g, id))).filter(Boolean);
+      box.groups.filter(g => reordered.indexOf(g) === -1).forEach(g => reordered.push(g));
+      box.groups = reordered;
+      const snap = dragSnapshot; dragSnapshot = null;
+      if (snap) pushUndo('Unterkategorie verschieben', () => restoreGroupOrder(snap));
+      renumberGroups(box);
+      render();
+      persistGroupPositions(box);
+    },
+  })));
+
+  const boxActions = document.createElement('div');
+  boxActions.className = 'box-actions';
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'add-bullet';
+  addBtn.innerHTML = '<i class="ti ti-plus" style="font-size:14px"></i> Zeile hinzufügen';
+  addBtn.addEventListener('click', () => addBulletToBox(box, null));
+  boxActions.appendChild(addBtn);
+
+  const addGroupBtn = document.createElement('button');
+  addGroupBtn.className = 'add-bullet';
+  addGroupBtn.innerHTML = '<i class="ti ti-folder-plus" style="font-size:14px"></i> Unterkategorie hinzufügen';
+  addGroupBtn.addEventListener('click', () => addGroup(box));
+  boxActions.appendChild(addGroupBtn);
+
+  div.appendChild(boxActions);
+  return div;
+}
+
+loadData();
+</script>
+</body>
+</html>
